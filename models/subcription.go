@@ -90,22 +90,10 @@ func (sub *Subcription) Find() error {
 		return err
 	}
 	// 根据 NodeOrder 字段重新排序 Nodes
-	if sub.NodeOrder != "" && len(sub.Nodes) > 0 {
-		orderedNames := strings.Split(sub.NodeOrder, ",")
-		nodeMap := make(map[string]Node)
-		for _, node := range sub.Nodes {
-			log.Println("node:", node)
-			nodeMap[node.Name] = node
-		}
-
-		var reorderedNodes []Node
-		for _, name := range orderedNames {
-			trimmedName := strings.TrimSpace(name)
-			if node, ok := nodeMap[trimmedName]; ok {
-				reorderedNodes = append(reorderedNodes, node)
-			}
-		}
-		sub.Nodes = reorderedNodes
+	var missing []string
+	sub.Nodes, missing = sortNodesByOrder(sub.Nodes, sub.NodeOrder)
+	if len(missing) > 0 {
+		log.Printf("订阅 %s 有 %d 个节点不在排序列表里(可能改过名或名字含逗号)，已追加到末尾: %v", sub.Name, len(missing), missing)
 	}
 
 	return nil
@@ -121,22 +109,7 @@ func (sub *Subcription) List() ([]Subcription, error) {
 
 	for i := range subs {
 		// 根据 NodeOrder 字段重新排序每个订阅的 Nodes
-		if subs[i].NodeOrder != "" && len(subs[i].Nodes) > 0 {
-			orderedNames := strings.Split(subs[i].NodeOrder, ",")
-			nodeMap := make(map[string]Node) // 用于快速查找节点对象
-			for _, node := range subs[i].Nodes {
-				nodeMap[node.Name] = node
-			}
-
-			var reorderedNodes []Node
-			for _, name := range orderedNames {
-				trimmedName := strings.TrimSpace(name)
-				if node, ok := nodeMap[trimmedName]; ok {
-					reorderedNodes = append(reorderedNodes, node)
-				}
-			}
-			subs[i].Nodes = reorderedNodes
-		}
+		subs[i].Nodes, _ = sortNodesByOrder(subs[i].Nodes, subs[i].NodeOrder)
 	}
 	return subs, nil
 }
@@ -157,4 +130,34 @@ func (sub *Subcription) Del() error {
 	// 但为了确保，你也可以显式删除 SubLogs:
 	// DB.Where("subcription_id = ?", sub.ID).Delete(&SubLogs{})
 	return DB.Delete(sub).Error
+}
+
+// sortNodesByOrder 按 NodeOrder 排序节点；不在 NodeOrder 里的节点(如改名后的节点)追加到末尾而不是丢弃，并返回这些节点名
+func sortNodesByOrder(nodes []Node, nodeOrder string) ([]Node, []string) {
+	if nodeOrder == "" || len(nodes) == 0 {
+		return nodes, nil
+	}
+	nodeIndex := make(map[string]int) // 节点名 → 下标，用于快速查找节点对象
+	for i, node := range nodes {
+		if _, ok := nodeIndex[node.Name]; !ok {
+			nodeIndex[node.Name] = i
+		}
+	}
+
+	used := make([]bool, len(nodes))
+	reorderedNodes := make([]Node, 0, len(nodes))
+	for _, name := range strings.Split(nodeOrder, ",") {
+		if i, ok := nodeIndex[strings.TrimSpace(name)]; ok && !used[i] {
+			used[i] = true
+			reorderedNodes = append(reorderedNodes, nodes[i])
+		}
+	}
+	var missing []string
+	for i, node := range nodes {
+		if !used[i] {
+			missing = append(missing, node.Name)
+			reorderedNodes = append(reorderedNodes, node)
+		}
+	}
+	return reorderedNodes, missing
 }

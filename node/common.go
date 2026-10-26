@@ -43,8 +43,8 @@ func Base64Encode(s string) string {
 
 // base64解码
 func Base64Decode(s string) string {
-	// 去除空格
-	s = strings.ReplaceAll(s, " ", "")
+	// 去除空格和换行，否则补齐位数会算错导致解码失败
+	s = strings.Join(strings.Fields(s), "")
 	// 判断是否有特殊字符来判断是标准base64还是url base64
 	match, err := regexp.MatchString(`[_-]`, s)
 	if err != nil {

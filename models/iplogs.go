@@ -21,7 +21,8 @@ func (iplog *SubLogs) Find(id int) error {
 
 // Update 更新IP
 func (iplog *SubLogs) Update() error {
-	return DB.Where("id = ? or ip = ?", iplog.ID, iplog.IP).Updates(iplog).Error
+	// 只按 id 更新：按 ip 匹配会把同一 IP 在其他订阅下的记录一起改掉
+	return DB.Where("id = ?", iplog.ID).Updates(iplog).Error
 }
 
 // List 获取IP列表
